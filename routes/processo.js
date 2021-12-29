@@ -64,6 +64,137 @@ async function resolve_captcha(site_key, site_url) {
 
 }
 
+async function gathering ( browser, page, process_num ) {
+	
+	await page.$eval('[name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso"]', (el, process_num) => el.value = process_num, process_num);
+
+	var captcha_response = await resolve_captcha();
+
+	await page.waitForSelector('[name="g-recaptcha-response"]')
+	
+	await page.evaluate((captcha_response) => {
+		document.querySelector('[name="g-recaptcha-response"]').value = captcha_response;
+		document.querySelector('[name="h-captcha-response"]').value = captcha_response;
+		onSubmit();
+	}, captcha_response)
+
+	// verificar se não existe botão
+	// verificar timeout
+	await page.waitForSelector(".rich-table-cell > a") // fazer timeout
+
+	await page.evaluate(() => {
+		document.querySelector(".rich-table-cell > a").click()
+	})
+ 
+	await browser.on('targetcreated', async(target) => {
+		if (target.type() !== 'page') {
+				return;
+		} else {
+				var page = await target.page();
+		}
+
+		await page.waitForNetworkIdle();
+
+		await page.evaluate(() => {
+
+			let data = {
+				public_url: window.location.href,
+				polo_ativo: [], 
+				polo_passivo: [],
+				movimentacoes: []
+			};
+	
+			let ativo_table = document.querySelector("#j_id130\\:processoPartesPoloAtivoResumidoList\\:tb");
+			for( var rowId = 0; rowId < ativo_table.rows.length; rowId++ ){
+				var text = ativo_table.rows.item(rowId).innerText
+				var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
+				var autor = text.match(pattern)[0];
+				var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
+				var documento = text.match(documentPattern);
+				documento = (documento) ? documento[0] : "Não tem";
+				if(!text.includes("ADVOGADO")){
+					data.polo_ativo.push({nome: autor, documento: documento});
+				}
+			}
+	
+	
+			let passivo_table = document.querySelector("#j_id130\\:processoPartesPoloPassivoResumidoList\\:tb");
+			for( var rowId = 0; rowId < passivo_table.rows.length; rowId++ ){
+				var text = passivo_table.rows.item(rowId).innerText
+				var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
+				var autor = text.match(pattern)[0];
+				var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
+				var documento = text.match(documentPattern);
+				documento = (documento) ? documento[0] : "Não tem";
+				if(!text.includes("ADVOGADO")){
+					data.polo_passivo.push({nome: autor, documento: documento});
+				}
+			}
+	
+			let mov_table = document.querySelectorAll("#j_id130\\:processoEvento\\:tb > tr > td:first-child");
+
+			for ( var rowId = 0; rowId < mov_table.length; rowId++) {
+					var content = mov_table.item(rowId).innerText;
+					data.polo_passivo.push({texto: content});
+			}
+
+
+			// request curl
+
+
+			console.log(data);
+		})
+
+		page.close();
+
+	});
+
+}
+
+router.post(
+'/sandbox',
+async (req, res, next) => {
+	const { processes } = req.body
+		res.json(processes);
+		
+		let browser = await puppeteer.launch({
+			args: [
+				'--start-maximized',
+			],
+			headless: false,
+		})
+		
+		const page = await browser.newPage()
+
+		await page.goto("http://127.0.0.1/sandbox/index.html#");
+
+		await page.$eval('[name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso"]', el => el.value = '0860607-14.2021.8.20.5001');
+		
+		// await page.waitForSelector("a.list-group-item.list-group-item-action.active") // fazer timeout
+
+		// await page.evaluate(() => {
+		// 	document.querySelector("a.list-group-item.list-group-item-action.active").click()
+		// })
+
+		const popup = await page.$('a.list-group-item.list-group-item-action.active');
+		await popup.click();
+		
+		await browser.on('targetcreated', async(target) => {
+			if (target.type() !== 'page') {
+					return;
+			} else {
+					var page = await target.page();
+			}
+			await page.waitForTimeout(5000).then(() => console.log('Waited a second!'));
+			await page.close();
+			// target.browser().close();
+		});
+
+
+});
+
+
+// coletar processo individual
 router.post(
 "/coleta",
 async (req, res, next) => {
@@ -129,6 +260,8 @@ async (req, res, next) => {
 
 })
 
+
+// gather
 router.post(
 	'/gather',
 	async (req, res, next) => {
@@ -166,114 +299,123 @@ router.post(
 	}
 )
 
+// consulta
 router.post(
 	"/consulta",
 	async (req, res, next) => {
-		const { process_num } = req.body
+		const { processes } = req.body
 
 		res.send("Sua requisição foi feita com sucesso, assim que terminamos devolvemos ao servidor");
 		
 		let browser = await puppeteer.launch({
 			args: [
-				'--window-size=1280,768',
+				'--start-maximized',
 			],
 			headless: false,
 		})
 		
 		const page = await browser.newPage()
 		
-		await page.setViewport({
-			width: 0,
-			height: 0,
-		})
-		
 		const url = 'https://pje1g.tjrn.jus.br/consultapublica/ConsultaPublica/listView.seam'
 
 
 		await page.goto(url)
 
-		await page.waitForSelector('[name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso"]')
-		await page.type('[name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso"]', process_num, {delay: 10});
 
+		// LOOP A PARTIR DAQUI
 		// // resolve
-		var captcha_response = await resolve_captcha();
-		await page.waitForSelector('[name="g-recaptcha-response"]')
 		
-		await page.evaluate((captcha_response) => {
-			document.querySelector('[name="g-recaptcha-response"]').value = captcha_response;
-			document.querySelector('[name="h-captcha-response"]').value = captcha_response;
-			onSubmit();
-		}, captcha_response)
+		// for (var i = 0; i < processes.length; i++) 
+		// {
 
+		// }
+			// await gathering(browser, page, processes[process].process_num);
+			var process_num = processes[0].process_num;
 
-		// verificar se não existe botão
-		// verificar timeout
-		await page.waitForSelector(".rich-table-cell > a") // fazer timeout
+			await page.$eval('[name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso"]', (el, process_num) => el.value = process_num, process_num);
 
-		await page.evaluate(() => {
-			document.querySelector(".rich-table-cell > a").click()
-		})
-   
-		await browser.on('targetcreated', async(target) => {
-			if (target.type() !== 'page') {
-					return;
-			} else {
-					var page = await target.page();
-			}
-
-			await page.waitForNetworkIdle();
-
-			var data = await page.evaluate(() => {
-
-				let data = {
-					public_url: window.location.href,
-					polo_ativo: [], 
-					polo_passivo: [],
-					movimentacoes: []
-				};
+			var captcha_response = await resolve_captcha();
 		
-				let ativo_table = document.querySelector("#j_id130\\:processoPartesPoloAtivoResumidoList\\:tb");
-				for( var rowId = 0; rowId < ativo_table.rows.length; rowId++ ){
-					var text = ativo_table.rows.item(rowId).innerText
-					var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
-					var autor = text.match(pattern)[0];
-					var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
-					var documento = text.match(documentPattern);
-					documento = (documento) ? documento[0] : "Não tem";
-					if(!text.includes("ADVOGADO")){
-						data.polo_ativo.push({nome: autor, documento: documento});
-					}
-				}
+			await page.waitForSelector('[name="g-recaptcha-response"]')
+			
+			await page.evaluate((captcha_response) => {
+				document.querySelector('[name="g-recaptcha-response"]').value = captcha_response;
+				document.querySelector('[name="h-captcha-response"]').value = captcha_response;
+				onSubmit();
+			}, captcha_response)
 		
+			// verificar se não existe botão
+			// verificar timeout
+			await page.waitForSelector(".rich-table-cell > a") // fazer timeout
 		
-				let passivo_table = document.querySelector("#j_id130\\:processoPartesPoloPassivoResumidoList\\:tb");
-				for( var rowId = 0; rowId < passivo_table.rows.length; rowId++ ){
-					var text = passivo_table.rows.item(rowId).innerText
-					var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
-					var autor = text.match(pattern)[0];
-					var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
-					var documento = text.match(documentPattern);
-					documento = (documento) ? documento[0] : "Não tem";
-					if(!text.includes("ADVOGADO")){
-						data.polo_passivo.push({nome: autor, documento: documento});
-					}
-				}
-		
-				let mov_table = document.querySelectorAll("#j_id130\\:processoEvento\\:tb > tr > td:first-child");
-
-				for ( var rowId = 0; rowId < mov_table.length; rowId++) {
-						var content = mov_table.item(rowId).innerText;
-						data.polo_passivo.push({texto: content});
-				}
-
-				return data;
+			await page.evaluate(() => {
+				document.querySelector(".rich-table-cell > a").click()
 			})
-
-			console.log(data)
-			target.browser().close();
-		});
-
+		 
+			await browser.on('targetcreated', async(target) => {
+				if (target.type() !== 'page') {
+						return;
+				} else {
+						var page = await target.page();
+				}
 		
+				await page.waitForNetworkIdle();
+		
+				await page.evaluate(() => {
+		
+					let data = {
+						public_url: window.location.href,
+						polo_ativo: [], 
+						polo_passivo: [],
+						movimentacoes: []
+					};
+			
+					let ativo_table = document.querySelector("#j_id130\\:processoPartesPoloAtivoResumidoList\\:tb");
+					for( var rowId = 0; rowId < ativo_table.rows.length; rowId++ ){
+						var text = ativo_table.rows.item(rowId).innerText
+						var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
+						var autor = text.match(pattern)[0];
+						var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
+						var documento = text.match(documentPattern);
+						documento = (documento) ? documento[0] : "Não tem";
+						if(!text.includes("ADVOGADO")){
+							data.polo_ativo.push({nome: autor, documento: documento});
+						}
+					}
+			
+			
+					let passivo_table = document.querySelector("#j_id130\\:processoPartesPoloPassivoResumidoList\\:tb");
+					for( var rowId = 0; rowId < passivo_table.rows.length; rowId++ ){
+						var text = passivo_table.rows.item(rowId).innerText
+						var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
+						var autor = text.match(pattern)[0];
+						var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
+						var documento = text.match(documentPattern);
+						documento = (documento) ? documento[0] : "Não tem";
+						if(!text.includes("ADVOGADO")){
+							data.polo_passivo.push({nome: autor, documento: documento});
+						}
+					}
+			
+					let mov_table = document.querySelectorAll("#j_id130\\:processoEvento\\:tb > tr > td:first-child");
+		
+					for ( var rowId = 0; rowId < mov_table.length; rowId++) {
+							var content = mov_table.item(rowId).innerText;
+							data.polo_passivo.push({texto: content});
+					}
+		
+		
+					// request curl
+		
+		
+					console.log(data);
+				})
+		
+				page.close();
+		
+			});
+		console.log("TODOS FORAM CONSULTADOS")
+
 		// await browser.close();
 
 	}

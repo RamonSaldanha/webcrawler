@@ -151,7 +151,7 @@ async (req, res, next) => {
 		args: [
 			'--start-maximized',
 		],
-		headless: false,
+		headless: true,
 	})
 	
 	var [ page ] = await browser.pages();

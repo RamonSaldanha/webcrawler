@@ -148,11 +148,10 @@ async (req, res, next) => {
 	res.json(processes);
 	
 	let browser = await puppeteer.launch({
-		args: ['--no-sandbox', '--disable-setuid-sandbox'],
+		executablePath: '/usr/bin/chromium-browser'
 		// args: [
 		// 	'--start-maximized',
 		// ],
-		headless: true,
 	})
 	
 	var [ page ] = await browser.pages();

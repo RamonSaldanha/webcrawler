@@ -86,68 +86,58 @@ async function gathering ( browser, page, process_num ) {
 		document.querySelector(".rich-table-cell > a").click()
 	})
  
-	await browser.on('targetcreated', async(target) => {
-		if (target.type() !== 'page') {
-				return;
-		} else {
-				var page = await target.page();
+	const popupPromise = new Promise(x => browser.once('targetcreated', target => x(target.page()))); 
+	const popup = await popupPromise;           // open new tab /window, 
+	await popup.waitForNetworkIdle();
+	var data = await popup.evaluate(() => {
+
+		let data = {
+			public_url: window.location.href,
+			polo_ativo: [], 
+			polo_passivo: [],
+			movimentacoes: []
+		};
+
+		let ativo_table = document.querySelector("#j_id130\\:processoPartesPoloAtivoResumidoList\\:tb");
+		for( var rowId = 0; rowId < ativo_table.rows.length; rowId++ ){
+			var text = ativo_table.rows.item(rowId).innerText
+			var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
+			var autor = text.match(pattern)[0];
+			var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
+			var documento = text.match(documentPattern);
+			documento = (documento) ? documento[0] : "Não tem";
+			if(!text.includes("ADVOGADO")){
+				data.polo_ativo.push({nome: autor, documento: documento});
+			}
 		}
 
-		await page.waitForNetworkIdle();
 
-		await page.evaluate(() => {
-
-			let data = {
-				public_url: window.location.href,
-				polo_ativo: [], 
-				polo_passivo: [],
-				movimentacoes: []
-			};
-	
-			let ativo_table = document.querySelector("#j_id130\\:processoPartesPoloAtivoResumidoList\\:tb");
-			for( var rowId = 0; rowId < ativo_table.rows.length; rowId++ ){
-				var text = ativo_table.rows.item(rowId).innerText
-				var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
-				var autor = text.match(pattern)[0];
-				var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
-				var documento = text.match(documentPattern);
-				documento = (documento) ? documento[0] : "Não tem";
-				if(!text.includes("ADVOGADO")){
-					data.polo_ativo.push({nome: autor, documento: documento});
-				}
+		let passivo_table = document.querySelector("#j_id130\\:processoPartesPoloPassivoResumidoList\\:tb");
+		for( var rowId = 0; rowId < passivo_table.rows.length; rowId++ ){
+			var text = passivo_table.rows.item(rowId).innerText
+			var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
+			var autor = text.match(pattern)[0];
+			var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
+			var documento = text.match(documentPattern);
+			documento = (documento) ? documento[0] : "Não tem";
+			if(!text.includes("ADVOGADO")){
+				data.polo_passivo.push({nome: autor, documento: documento});
 			}
-	
-	
-			let passivo_table = document.querySelector("#j_id130\\:processoPartesPoloPassivoResumidoList\\:tb");
-			for( var rowId = 0; rowId < passivo_table.rows.length; rowId++ ){
-				var text = passivo_table.rows.item(rowId).innerText
-				var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
-				var autor = text.match(pattern)[0];
-				var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
-				var documento = text.match(documentPattern);
-				documento = (documento) ? documento[0] : "Não tem";
-				if(!text.includes("ADVOGADO")){
-					data.polo_passivo.push({nome: autor, documento: documento});
-				}
-			}
-	
-			let mov_table = document.querySelectorAll("#j_id130\\:processoEvento\\:tb > tr > td:first-child");
+		}
 
-			for ( var rowId = 0; rowId < mov_table.length; rowId++) {
-					var content = mov_table.item(rowId).innerText;
-					data.polo_passivo.push({texto: content});
-			}
+		let mov_table = document.querySelectorAll("#j_id130\\:processoEvento\\:tb > tr > td:first-child");
 
+		for ( var rowId = 0; rowId < mov_table.length; rowId++) {
+				var content = mov_table.item(rowId).innerText.replace(/(\r\n|\n|\r)/gm, "");
+				data.movimentacoes.push({texto: content});
+		}
 
-			// request curl
+		return data;
+	})
 
+	console.log(data);
 
-			console.log(data);
-		})
-
-		page.close();
-
-	});
+	await popup.close();
 
 }
 
@@ -155,40 +145,40 @@ router.post(
 '/sandbox',
 async (req, res, next) => {
 	const { processes } = req.body
-		res.json(processes);
-		
-		let browser = await puppeteer.launch({
-			args: [
-				'--start-maximized',
-			],
-			headless: false,
-		})
-		
-		const page = await browser.newPage()
+	res.json(processes);
+	
+	let browser = await puppeteer.launch({
+		args: [
+			'--start-maximized',
+		],
+		headless: false,
+	})
+	
+	var [ page ] = await browser.pages();
 
+
+	// var popup = await browser.on('targetcreated', async(target) => {
+	// 	return await target.page();
+	// });
+
+	for (var i = 0; i < processes.length; i++) 
+	{
+		var process_num = processes[i].process_num;
+		
 		await page.goto("http://127.0.0.1/sandbox/index.html#");
 
-		await page.$eval('[name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso"]', el => el.value = '0860607-14.2021.8.20.5001');
-		
-		// await page.waitForSelector("a.list-group-item.list-group-item-action.active") // fazer timeout
+		await page.waitForSelector(".list-group-item") // fazer timeout
 
-		// await page.evaluate(() => {
-		// 	document.querySelector("a.list-group-item.list-group-item-action.active").click()
-		// })
+		await page.evaluate(() => {
+			document.querySelector(".list-group-item").click()
+		})
 
-		const popup = await page.$('a.list-group-item.list-group-item-action.active');
-		await popup.click();
-		
-		await browser.on('targetcreated', async(target) => {
-			if (target.type() !== 'page') {
-					return;
-			} else {
-					var page = await target.page();
-			}
-			await page.waitForTimeout(5000).then(() => console.log('Waited a second!'));
-			await page.close();
-			// target.browser().close();
-		});
+		const newPagePromise = new Promise(x => browser.once('targetcreated', target => x(target.page()))); 
+		const newPage = await newPagePromise;           // open new tab /window, 
+		await newPage.waitForTimeout(5000).then(() => console.log('Waited a second!'));
+
+		await newPage.close();
+	}
 
 
 });
@@ -314,109 +304,29 @@ router.post(
 			headless: false,
 		})
 		
-		const page = await browser.newPage()
+		var [ page ] = await browser.pages();
+
 		
 		const url = 'https://pje1g.tjrn.jus.br/consultapublica/ConsultaPublica/listView.seam'
 
 
-		await page.goto(url)
 
 
 		// LOOP A PARTIR DAQUI
 		// // resolve
 		
-		// for (var i = 0; i < processes.length; i++) 
-		// {
+		for (var i = 0; i < processes.length; i++)
+		{
+			await page.goto(url)
 
-		// }
-			// await gathering(browser, page, processes[process].process_num);
-			var process_num = processes[0].process_num;
-
-			await page.$eval('[name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso"]', (el, process_num) => el.value = process_num, process_num);
-
-			var captcha_response = await resolve_captcha();
+			// console.log(index)
+			await gathering(browser, page, processes[i].process_num);
+		}
+	
 		
-			await page.waitForSelector('[name="g-recaptcha-response"]')
-			
-			await page.evaluate((captcha_response) => {
-				document.querySelector('[name="g-recaptcha-response"]').value = captcha_response;
-				document.querySelector('[name="h-captcha-response"]').value = captcha_response;
-				onSubmit();
-			}, captcha_response)
-		
-			// verificar se não existe botão
-			// verificar timeout
-			await page.waitForSelector(".rich-table-cell > a") // fazer timeout
-		
-			await page.evaluate(() => {
-				document.querySelector(".rich-table-cell > a").click()
-			})
-		 
-			await browser.on('targetcreated', async(target) => {
-				if (target.type() !== 'page') {
-						return;
-				} else {
-						var page = await target.page();
-				}
-		
-				await page.waitForNetworkIdle();
-		
-				await page.evaluate(() => {
-		
-					let data = {
-						public_url: window.location.href,
-						polo_ativo: [], 
-						polo_passivo: [],
-						movimentacoes: []
-					};
-			
-					let ativo_table = document.querySelector("#j_id130\\:processoPartesPoloAtivoResumidoList\\:tb");
-					for( var rowId = 0; rowId < ativo_table.rows.length; rowId++ ){
-						var text = ativo_table.rows.item(rowId).innerText
-						var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
-						var autor = text.match(pattern)[0];
-						var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
-						var documento = text.match(documentPattern);
-						documento = (documento) ? documento[0] : "Não tem";
-						if(!text.includes("ADVOGADO")){
-							data.polo_ativo.push({nome: autor, documento: documento});
-						}
-					}
-			
-			
-					let passivo_table = document.querySelector("#j_id130\\:processoPartesPoloPassivoResumidoList\\:tb");
-					for( var rowId = 0; rowId < passivo_table.rows.length; rowId++ ){
-						var text = passivo_table.rows.item(rowId).innerText
-						var pattern = /^.*(?=( - CNPJ:))|^.*(?=( - CPF:))|^.*(?=( [(]AUTOR))/gm;
-						var autor = text.match(pattern)[0];
-						var documentPattern = /([0-9]{2}[\.]?[0-9]{3}[\.]?[0-9]{3}[\/]?[0-9]{4}[-]?[0-9]{2})|([0-9]{3}[\.]?[0-9]{3}[\.]?[0-9]{3}[-]?[0-9]{2})/gm;
-						var documento = text.match(documentPattern);
-						documento = (documento) ? documento[0] : "Não tem";
-						if(!text.includes("ADVOGADO")){
-							data.polo_passivo.push({nome: autor, documento: documento});
-						}
-					}
-			
-					let mov_table = document.querySelectorAll("#j_id130\\:processoEvento\\:tb > tr > td:first-child");
-		
-					for ( var rowId = 0; rowId < mov_table.length; rowId++) {
-							var content = mov_table.item(rowId).innerText;
-							data.polo_passivo.push({texto: content});
-					}
-		
-		
-					// request curl
-		
-		
-					console.log(data);
-				})
-		
-				page.close();
-		
-			});
 		console.log("TODOS FORAM CONSULTADOS")
 
-		// await browser.close();
+		await browser.close();
 
 	}
 )
@@ -585,4 +495,5 @@ router.post(
 		// res.send( processes )
 	});
 	// document.getElementById('fPP:searchProcessos').click()
-	module.exports = router;
+
+module.exports = router;

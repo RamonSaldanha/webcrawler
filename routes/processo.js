@@ -148,9 +148,10 @@ async (req, res, next) => {
 	res.json(processes);
 	
 	let browser = await puppeteer.launch({
-		args: [
-			'--start-maximized',
-		],
+		args: ['--no-sandbox', '--disable-setuid-sandbox'],
+		// args: [
+		// 	'--start-maximized',
+		// ],
 		headless: true,
 	})
 	

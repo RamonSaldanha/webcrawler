@@ -152,17 +152,15 @@ router.post(
 		res.send("Sua requisição foi feita com sucesso, assim que terminamos devolvemos ao servidor");
 
 		// cloud
-		let browser = await puppeteer.launch({
-			args: ['--no-sandbox', '--disable-setuid-sandbox'],
-		})
+		// let browser = await puppeteer.launch({
+		// 	args: ['--no-sandbox', '--disable-setuid-sandbox'],
+		// })
 		
 		// local
-		// let browser = await puppeteer.launch({
-		// 	args: [
-		// 		'--start-maximized',
-		// 	],
-		// 	headless: false,
-		// })
+		let browser = await puppeteer.launch({
+			args: ['--no-sandbox', '--disable-setuid-sandbox'],
+			// headless: false,
+		})
 		
 		var [ page ] = await browser.pages();
 

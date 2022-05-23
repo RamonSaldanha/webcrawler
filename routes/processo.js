@@ -158,8 +158,10 @@ router.post(
 		
 		// local
 		let browser = await puppeteer.launch({
-			args: ['--no-sandbox', '--disable-setuid-sandbox'],
-			// headless: false,
+			args: [
+				'--start-maximized',
+			],
+			headless: false,
 		})
 		
 		var [ page ] = await browser.pages();

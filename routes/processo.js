@@ -223,11 +223,10 @@ router.post(
 
 		// LOOP A PARTIR DAQUI
 		// // resolve
-		
+		var start = Date.now();
+
 		for (var i = 0; i < processes.length; i++)
 		{
-			var start = Date.now();
-
 			await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36');
 			
 			try {
@@ -257,11 +256,14 @@ router.post(
 
 			}
 
-			var end = Date.now();
+			
 
-			console.log(`- Tempo de execução: ${(((end-start) % 60000) / 1000) }seg / ${ end - start }ms 👍 ⌛`);
 		}
-	
+
+		var end = Date.now();
+
+		console.log(`- Tempo de execução: ${ end - start }ms 👍 ⌛`);
+
 		console.log("- Todas consultas foram feitas ❤️");
 
 		await browser.close();

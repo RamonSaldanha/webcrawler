@@ -228,6 +228,7 @@ router.post(
 			try {
 				await page.goto(url)
 			} catch (e) {
+				console.log("Houve algum erro ao acessar a página de consulta", e);
 				await new Promise(resolve => setTimeout(resolve, 5000 * 3));
 				// se houver algum erro, o sistema vai esperar um pouco e tentar novamente
 				i--;

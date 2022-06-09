@@ -233,6 +233,8 @@ router.post(
 				i--;
 			}
 
+			console.log("A página de consulta foi acessada");
+
 			// await page.screenshot({ path: 'consulta.png', fullPage: true });
 			try {
 				await gathering(browser, page, processes[i].process_num);

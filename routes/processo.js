@@ -41,10 +41,12 @@ async function resolve_captcha(api_key, captcha_type, site_key, site_url) {
 
 	let captcha_id = parsed_captcha_id.request;
 
+	let i = 1;
 
 	while(1) {
-		await sleep(10)
-		console.log("VERIFICANDO")
+		await sleep(8)
+
+		console.log("Tentativa " + i)
 
 		let captcha_ready = await curl({
 				method: 'GET',
@@ -54,13 +56,14 @@ async function resolve_captcha(api_key, captcha_type, site_key, site_url) {
 		let parsed_captcha_ready = JSON.parse(captcha_ready);
 		
 		if(parsed_captcha_ready.status == 1) {
-			console.log("CAPTCHA RESOLVIDO");
+			console.log("- Captcha resolvido ❤️");
 			return parsed_captcha_ready.request;
 		} else if(parsed_captcha_ready.request != "CAPCHA_NOT_READY") {
 			console.log("CAPTCHA NÃO ESTÁ PRONTO - provavelmente o 2captcha está sem créditos");
 			return false;
 		}
 
+		i++;
 	}
 
 }
@@ -223,6 +226,8 @@ router.post(
 		
 		for (var i = 0; i < processes.length; i++)
 		{
+			var start = Date.now();
+
 			await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36');
 			
 			try {
@@ -234,7 +239,7 @@ router.post(
 				i--;
 			}
 
-			console.log("A página de consulta foi acessada");
+			console.log("- A página de consulta foi acessada");
 
 			// await page.screenshot({ path: 'consulta.png', fullPage: true });
 			try {
@@ -251,9 +256,13 @@ router.post(
 				}
 
 			}
+
+			var end = Date.now();
+
+			console.log(`- Tempo de execução: ${(((end-start) % 60000) / 1000) }seg / ${ end - start }ms 👍 ⌛`);
 		}
 	
-		console.log("TODOS FORAM CONSULTADOS")
+		console.log("- Todas consultas foram feitas ❤️");
 
 		await browser.close();
 
